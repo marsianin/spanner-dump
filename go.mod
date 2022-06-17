@@ -1,4 +1,4 @@
-module github.com/cloudspannerecosystem/spanner-dump
+module github.com/marsianin/spanner-dump
 
 go 1.14
 
