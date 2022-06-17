@@ -28,14 +28,15 @@ import (
 )
 
 type options struct {
-	ProjectId  string `short:"p" long:"project" env:"SPANNER_PROJECT_ID" description:"(required) GCP Project ID."`
-	InstanceId string `short:"i" long:"instance" env:"SPANNER_INSTANCE_ID" description:"(required) Cloud Spanner Instance ID."`
-	DatabaseId string `short:"d" long:"database" env:"SPANNER_DATABASE_ID" description:"(required) Cloud Spanner Database ID."`
-	Tables     string `long:"tables" description:"comma-separated table names, e.g. \"table1,table2\" "`
-	NoDDL      bool   `long:"no-ddl" description:"No DDL information."`
-	NoData     bool   `long:"no-data" description:"Do not dump data."`
-	Timestamp  string `long:"timestamp" description:"Timestamp for database snapshot in the RFC 3339 format."`
-	BulkSize   uint   `long:"bulk-size" description:"Bulk size for values in a single INSERT statement."`
+	ProjectId     string `short:"p" long:"project" env:"SPANNER_PROJECT_ID" description:"(required) GCP Project ID."`
+	InstanceId    string `short:"i" long:"instance" env:"SPANNER_INSTANCE_ID" description:"(required) Cloud Spanner Instance ID."`
+	DatabaseId    string `short:"d" long:"database" env:"SPANNER_DATABASE_ID" description:"(required) Cloud Spanner Database ID."`
+	Tables        string `long:"tables" description:"comma-separated table names, e.g. \"table1,table2\" "`
+	ExcludeTables string `long:"exclude-tables" description:"comma-separated table names, e.g. \"table1,table2\" "`
+	NoDDL         bool   `long:"no-ddl" description:"No DDL information."`
+	NoData        bool   `long:"no-data" description:"Do not dump data."`
+	Timestamp     string `long:"timestamp" description:"Timestamp for database snapshot in the RFC 3339 format."`
+	BulkSize      uint   `long:"bulk-size" description:"Bulk size for values in a single INSERT statement."`
 }
 
 func main() {
@@ -63,8 +64,13 @@ func main() {
 		tables = strings.Split(opts.Tables, ",")
 	}
 
+	var excludeTables []string
+	if opts.ExcludeTables != "" {
+		excludeTables = strings.Split(opts.ExcludeTables, ",")
+	}
+
 	ctx := context.Background()
-	dumper, err := NewDumper(ctx, opts.ProjectId, opts.InstanceId, opts.DatabaseId, os.Stdout, timestamp, opts.BulkSize, tables)
+	dumper, err := NewDumper(ctx, opts.ProjectId, opts.InstanceId, opts.DatabaseId, os.Stdout, timestamp, opts.BulkSize, tables, excludeTables)
 	if err != nil {
 		exitf("Failed to create dumper: %v\n", err)
 	}

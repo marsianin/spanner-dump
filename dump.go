@@ -42,20 +42,21 @@ const defaultBulkSize = 100
 
 // Dumper is a dumper to export a database.
 type Dumper struct {
-	project   string
-	instance  string
-	database  string
-	tables    map[string]bool
-	out       io.Writer
-	timestamp *time.Time
-	bulkSize  uint
+	project       string
+	instance      string
+	database      string
+	tables        map[string]bool
+	excludeTables map[string]bool
+	out           io.Writer
+	timestamp     *time.Time
+	bulkSize      uint
 
 	client      *spanner.Client
 	adminClient *adminapi.DatabaseAdminClient
 }
 
 // NewDumper creates Dumper with specified configurations.
-func NewDumper(ctx context.Context, project, instance, database string, out io.Writer, timestamp *time.Time, bulkSize uint, tables []string) (*Dumper, error) {
+func NewDumper(ctx context.Context, project, instance, database string, out io.Writer, timestamp *time.Time, bulkSize uint, tables []string, excludeTables []string) (*Dumper, error) {
 	dbPath := fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instance, database)
 	client, err := spanner.NewClientWithConfig(ctx, dbPath, spanner.ClientConfig{
 		SessionPoolConfig: spanner.SessionPoolConfig{
@@ -86,20 +87,26 @@ func NewDumper(ctx context.Context, project, instance, database string, out io.W
 	}
 
 	d := &Dumper{
-		project:     project,
-		instance:    instance,
-		database:    database,
-		tables:      map[string]bool{},
-		out:         out,
-		timestamp:   timestamp,
-		bulkSize:    bulkSize,
-		client:      client,
-		adminClient: adminClient,
+		project:       project,
+		instance:      instance,
+		database:      database,
+		tables:        map[string]bool{},
+		excludeTables: map[string]bool{},
+		out:           out,
+		timestamp:     timestamp,
+		bulkSize:      bulkSize,
+		client:        client,
+		adminClient:   adminClient,
 	}
 
 	for _, table := range tables {
 		d.tables[strings.Trim(table, "`")] = true
 	}
+
+	for _, table := range excludeTables {
+		d.excludeTables[strings.Trim(table, "`")] = true
+	}
+
 	return d, nil
 }
 
@@ -120,6 +127,9 @@ func (d *Dumper) DumpDDLs(ctx context.Context) error {
 	}
 
 	for _, ddl := range resp.Statements {
+		if len(d.excludeTables) > 0 && d.excludeTables[parseTableNameFromDDL(ddl)] {
+			continue
+		}
 		if len(d.tables) > 0 && !d.tables[parseTableNameFromDDL(ddl)] {
 			continue
 		}
@@ -163,6 +173,10 @@ func (d *Dumper) DumpTables(ctx context.Context) error {
 	}
 
 	return iter.Do(func(t *Table) error {
+		if len(d.excludeTables) > 0 && d.excludeTables[t.Name] {
+			return nil
+		}
+
 		if len(d.tables) > 0 && !d.tables[t.Name] {
 			return nil
 		}
@@ -171,7 +185,7 @@ func (d *Dumper) DumpTables(ctx context.Context) error {
 }
 
 func (d *Dumper) dumpTable(ctx context.Context, table *Table, txn *spanner.ReadOnlyTransaction) error {
-	stmt := spanner.NewStatement(fmt.Sprintf("SELECT %s FROM `%s`", table.quotedColumnList(), table.Name))
+	stmt := spanner.NewStatement(fmt.Sprintf("SELECT %s FROM `%s`", table.quotedColumnList("`"), table.Name))
 	opts := spanner.QueryOptions{Priority: sppb.RequestOptions_PRIORITY_LOW}
 	iter := txn.QueryWithOptions(ctx, stmt, opts)
 	defer iter.Stop()

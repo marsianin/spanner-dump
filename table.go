@@ -37,10 +37,10 @@ func (t *Table) String() string {
 	return fmt.Sprintf("{Name: %q, Columns: %v, ChildTables: %v}", t.Name, t.Columns, t.ChildTables)
 }
 
-func (t *Table) quotedColumnList() string {
+func (t *Table) quotedColumnList(quote string) string {
 	var quoted []string
 	for _, c := range t.Columns {
-		quoted = append(quoted, fmt.Sprintf("`%s`", c))
+		quoted = append(quoted, fmt.Sprintf("%s%s%s", quote, c, quote))
 	}
 	return strings.Join(quoted, ", ")
 }

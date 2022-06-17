@@ -110,7 +110,7 @@ func DecodeColumn(column spanner.GenericColumnValue) (string, error) {
 				return "NULL", nil
 			}
 			for _, v := range vs {
-				decoded = append(decoded, nullStringToString(v))
+				decoded = append(decoded, nullStringToString(v, `"`))
 			}
 		case pb.TypeCode_TIMESTAMP:
 			var vs []spanner.NullTime
@@ -159,7 +159,7 @@ func DecodeColumn(column spanner.GenericColumnValue) (string, error) {
 		case pb.TypeCode_STRUCT:
 			return "", errors.New("unexpected error: column has STRUCT data type")
 		}
-		return fmt.Sprintf("[%s]", strings.Join(decoded, ", ")), nil
+		return fmt.Sprintf("'{%s}'", strings.Join(decoded, ", ")), nil
 	case pb.TypeCode_BOOL:
 		var v spanner.NullBool
 		if err := column.Decode(&v); err != nil {
@@ -189,7 +189,7 @@ func DecodeColumn(column spanner.GenericColumnValue) (string, error) {
 		if err := column.Decode(&v); err != nil {
 			return "", err
 		}
-		return nullStringToString(v), nil
+		return nullStringToString(v, "'"), nil
 	case pb.TypeCode_TIMESTAMP:
 		var v spanner.NullTime
 		if err := column.Decode(&v); err != nil {
@@ -266,9 +266,15 @@ func nullInt64ToString(v spanner.NullInt64) string {
 	}
 }
 
-func nullStringToString(v spanner.NullString) string {
+func nullStringToString(v spanner.NullString, quote string) string {
 	if v.Valid {
-		return strconv.Quote(v.StringVal)
+		preparedString := strings.Replace(v.String(), "'", "''", -1)
+		if quote == `"` {
+			preparedString = strconv.Quote(preparedString)
+			return preparedString
+		}
+
+		return fmt.Sprintf(`%s%s%s`, quote, preparedString, quote)
 	} else {
 		return "NULL"
 	}
@@ -277,7 +283,7 @@ func nullStringToString(v spanner.NullString) string {
 func nullTimeToString(v spanner.NullTime) string {
 	if v.Valid {
 		// Timestamp Literal: https://cloud.google.com/spanner/docs/lexical#timestamp_literals
-		return fmt.Sprintf(`TIMESTAMP "%s"`, v.Time.Format(time.RFC3339Nano))
+		return fmt.Sprintf(`TIMESTAMP '%s'`, v.Time.Format(time.RFC3339Nano))
 	} else {
 		return "NULL"
 	}
@@ -286,7 +292,7 @@ func nullTimeToString(v spanner.NullTime) string {
 func nullDateToString(v spanner.NullDate) string {
 	if v.Valid {
 		// Date Literal: https://cloud.google.com/spanner/docs/lexical#date_literals
-		return fmt.Sprintf(`DATE "%s"`, v.Date.String())
+		return fmt.Sprintf(`DATE '%s'`, v.Date.String())
 	} else {
 		return "NULL"
 	}
@@ -294,7 +300,7 @@ func nullDateToString(v spanner.NullDate) string {
 
 func nullNumericToString(v spanner.NullNumeric) string {
 	if v.Valid {
-		return fmt.Sprintf(`NUMERIC "%s"`, v.String())
+		return fmt.Sprintf(`NUMERIC '%s'`, v.String())
 	} else {
 		return "NULL"
 	}
@@ -302,7 +308,9 @@ func nullNumericToString(v spanner.NullNumeric) string {
 
 func nullJSONToString(v spanner.NullJSON) string {
 	if v.Valid {
-		return fmt.Sprintf(`JSON %s`, strconv.Quote(v.String()))
+		// escape single quotes
+		preparedString := strings.Replace(v.String(), "'", "''", -1)
+		return fmt.Sprintf(`'%s'`, preparedString)
 	} else {
 		return "NULL"
 	}
